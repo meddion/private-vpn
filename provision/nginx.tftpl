@@ -1,0 +1,19 @@
+#!/bin/bash
+
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+
+mkdir -p /home/${vm_user}/nginx-proxy
+cd /home/${vm_user}/nginx-proxy
+sudo usermod -aG docker ${vm_user}
+
+IMAGE_TAG=stable-alpine@sha256:d4d72ee8e6d028c5ad939454164d3645be2d38afb5c352277926a48e24abf4fa
+
+docker run --name nginx-proxy -p 80:80 -p 443:443 -d nginx:$${IMAGE_TAG}
+
+cat <<EOF > wg_vpn.conf
+${nginx_conf_content}
+EOF
+
+docker cp wg_vpn.conf "$(docker ps -q)":/etc/nginx/conf.d/default.conf
+docker exec -it "$(docker ps -q)" nginx -s reload

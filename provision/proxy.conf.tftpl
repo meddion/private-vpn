@@ -1,0 +1,97 @@
+map \$scheme \$hsts_header {
+	https "max-age=63072000; preload";
+}
+
+limit_req_zone \$binary_remote_addr zone=one:10m rate=5r/s;
+
+server {
+	listen ${nginx_listen_port};
+	listen [::]:${nginx_listen_port};
+	server_name ${nginx_server_name};
+
+	# more_set_headers 'Server: Apache/2.4.18 (Ubuntu)';
+	server_tokens off;
+
+	# Block Exploits
+	# include conf.d/include/block-exploits.conf;
+	# Custom
+	# include /data/nginx/custom/server_proxy[.]conf;
+
+	add_header X-Served-By \$host;
+	proxy_set_header Upgrade \$http_upgrade;
+	proxy_set_header Connection \$http_connection;
+	proxy_http_version 1.1;
+
+	access_log off;
+	error_log /var/log/nginx/wg_vpn_error.log warn;
+
+	location / {
+		return 404;	
+	}
+
+	%{ for target in jsondecode(nginx_proxy_targets)  }
+
+	location /${target.prefix}/ {
+		limit_req zone=one burst=7; 
+		proxy_set_header Host \$host;
+		proxy_set_header X-Forwarded-Scheme \$scheme;
+		proxy_set_header X-Forwarded-Proto \$scheme;
+		proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+		proxy_set_header X-Real-IP \$remote_addr;
+
+		proxy_set_header Upgrade \$http_upgrade;
+		proxy_set_header Connection \$http_connection;
+		proxy_http_version 1.1;
+
+		rewrite ^/${target.prefix}/(.*) /\$1 break;
+		proxy_pass ${nginx_forward_scheme}://${target.host}:${target.port}/\$1;
+	}
+
+	location ~* /${target.prefix}/.*\.(css|js|jpe?g|gif|png|json|webp|woff|eot|ttf|svg|ico|css\.map|js\.map)$ {
+		limit_req zone=one burst=7; 
+		proxy_set_header Host \$host;
+		proxy_set_header X-Forwarded-Scheme \$scheme;
+		proxy_set_header X-Forwarded-Proto \$scheme;
+		proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+		proxy_set_header X-Real-IP \$remote_addr;
+
+		proxy_set_header Upgrade \$http_upgrade;
+		proxy_set_header Connection \$http_connection;
+		proxy_http_version 1.1;
+
+		if_modified_since off;
+
+		# use the public cache
+		#proxy_cache public-cache;
+		proxy_cache_key \$host\$request_uri;
+
+		# ignore these headers for media
+		proxy_ignore_headers Set-Cookie Cache-Control Expires X-Accel-Expires;
+
+		# cache 200s and also 404s (not ideal but there are a few 404 images for some reason)
+		proxy_cache_valid any 30m;
+		proxy_cache_valid 404 1m;
+
+		# strip this header to avoid If-Modified-Since requests
+		proxy_hide_header Last-Modified;
+		proxy_hide_header Cache-Control;
+		proxy_hide_header Vary;
+
+		proxy_cache_bypass 0;
+		proxy_no_cache 0;
+
+		proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504 http_404;
+		proxy_connect_timeout 5s;
+		proxy_read_timeout 45s;
+
+		expires @30m;
+
+		access_log off;
+		log_not_found off;
+
+		rewrite ^/${target.prefix}/(.*) /\$1 break;
+		proxy_pass ${nginx_forward_scheme}://${target.host}:${target.port}/\$1;
+	}
+
+	%{ endfor }
+}

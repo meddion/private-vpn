@@ -1,0 +1,19 @@
+wg_easy_password_hash: "$2y$..."
+wg_server_private_key: <private_key>
+
+wg_clients:
+  - name: work-laptop
+    address: 10.1.1.53
+    public_key: <pub_key>
+    preshared_key: <preshared_key>
+  - name: personal-phone
+    address: 10.1.1.52
+    public_key: <pub_key>
+    private_key: <private_key>
+    preshared_key: <preshared_key>
+
+instances:
+  eu-central-1b:
+    - name: wg0
+      instance_type: t4g.nano
+      private_ip: 10.0.1.50

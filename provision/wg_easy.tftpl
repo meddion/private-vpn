@@ -1,0 +1,99 @@
+#!/bin/bash
+
+# All bash variables are prefixed with $$ to avoid conflict with tftpl variables.
+
+mkdir -p /home/${vm_user}/wg-easy
+cd /home/${vm_user}/wg-easy
+
+WG_EASY_IMAGE_TAG=nightly@sha256:d14cb4d141da56e18c2215dded41507eb8b2f5fd2ee087429bd528a1407456e2
+
+# Install wireguard tools.
+sudo apt-get update -y
+sudo apt-get install -y wireguard
+
+# Docker install.
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+sudo usermod -aG docker ${vm_user}
+# newgrp docker 
+
+mkdir -p /etc/wireguard
+
+%{ if wg_server_private_key != "" }
+echo "${wg_server_private_key}" | sudo tee /etc/wireguard/privatekey > /dev/null
+%{ else }
+wg genkey | sudo tee /etc/wireguard/privatekey
+%{ endif }
+
+if sudo test ! -f "/etc/wireguard/publickey"; then
+  sudo cat /etc/wireguard/privatekey | wg pubkey | sudo tee /etc/wireguard/publickey > /dev/null
+fi
+
+PRIVATE_KEY=$(sudo cat /etc/wireguard/privatekey)
+PUBLIC_KEY=$(sudo cat /etc/wireguard/publickey)
+PUBLIC_IP=$(curl -s http://checkip.amazonaws.com | tr -d '\r\n')
+
+sudo tee /etc/wireguard/wg0.json > /dev/null <<EOF
+{
+      "server": {
+        "privateKey": "$${PRIVATE_KEY}",
+        "publicKey": "$${PUBLIC_KEY}",
+        "address": "${wg_vpn_server_address}"
+      },
+      "clients": {
+        %{ for idx, client in jsondecode(wg_clients) }
+          "${uuid()}": { 
+                "name": "${client.name}",
+                "enabled": true,
+                "address": "${client.address}",
+                "publicKey": "${client.public_key}",
+                "preSharedKey": "${client.preshared_key}"
+                %{ if client.private_key != "" },"privateKey": "${client.private_key}"%{ endif }
+          }%{ if idx != length(jsondecode(wg_clients)) - 1 },%{ endif }
+        %{ endfor }
+      }
+}
+EOF
+
+cat <<EOF > docker-compose.yml
+services:
+  wg-easy:
+    environment:
+      - LANG=en
+      - WG_HOST=$${PUBLIC_IP}
+      - WG_DEVICE=eth0
+      - WG_DEFAULT_ADDRESS=${wg_vpn_mask}
+      - WG_DEFAULT_DNS=${wg_dns}
+      - PASSWORD_HASH=${wg_easy_password_hash}
+      - PORT=${wg_easy_web_port}
+      - WEBUI_HOST=0.0.0.0
+      - UI_TRAFFIC_STATS=true
+      - UI_CHART_TYPE=3
+      - WG_PORT=${wg_port}
+      # - WG_CONFIG_PORT=92820
+      # - WG_MTU=1420
+      # - WG_ALLOWED_IPS=192.168.15.0/24, 10.0.1.0/24
+      # - WG_PERSISTENT_KEEPALIVE=25
+      # - WG_PRE_UP=echo "Pre Up" > /etc/wireguard/pre-up.txt
+      # - WG_POST_UP=echo "Post Up" > /etc/wireguard/post-up.txt
+      # - WG_PRE_DOWN=echo "Pre Down" > /etc/wireguard/pre-down.txt
+      # - WG_POST_DOWN=echo "Post Down" > /etc/wireguard/post-down.txt
+
+    image: ghcr.io/wg-easy/wg-easy:$${WG_EASY_IMAGE_TAG}
+    container_name: wg-easy
+    volumes:
+      - /etc/wireguard:/etc/wireguard
+    ports:
+      - "${wg_port}:${wg_port}/udp"
+      - "${wg_easy_web_port}:${wg_easy_web_port}/tcp"
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+      # - NET_RAW # ⚠️  Uncomment if using Podman
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+EOF
+
+docker compose up -d
