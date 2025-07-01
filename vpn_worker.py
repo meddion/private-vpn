@@ -7,7 +7,6 @@ import time
 
 import boto3
 import botocore
-import keyring
 
 
 def vpn_instance_ips(region=None, aws_profile=None):
@@ -18,13 +17,13 @@ def vpn_instance_ips(region=None, aws_profile=None):
     try:
         session_kwargs = {"region_name": region}
         # Try to load credentials from keyring
-        access_key = keyring.get_password("aws", "access_key")
-        secret_key = keyring.get_password("aws", "secret_key")
-        if access_key and secret_key:
-            print("Using AWS credentials from keyring.")
-            session_kwargs["aws_access_key_id"] = access_key
-            session_kwargs["aws_secret_access_key"] = secret_key
-        elif aws_profile:
+        # access_key = keyring.get_password("aws", "access_key")
+        # secret_key = keyring.get_password("aws", "secret_key")
+        # if access_key and secret_key:
+        #     print("Using AWS credentials from keyring.")
+        #     session_kwargs["aws_access_key_id"] = access_key
+        #     session_kwargs["aws_secret_access_key"] = secret_key
+        if aws_profile:
             print(f"Using AWS profile: {aws_profile}")
             session_kwargs["profile_name"] = aws_profile
 
@@ -56,7 +55,14 @@ def vpn_instance_ips(region=None, aws_profile=None):
     return ips
 
 
-def update_wireguard_config(config_path, vpn_profile, available_ips):
+def is_vpn_established():
+    res = subprocess.run(
+        ["wg", "show", "interfaces"], capture_output=True, text=True, check=True
+    )
+    return res.stdout.strip() != ""
+
+
+def update_wireguard_config(config_path, vpn_profile, available_ips, up):
     """
     Parses a WireGuard config file and updates endpoint IPs if they are not in the available list.
     """
@@ -97,11 +103,7 @@ def update_wireguard_config(config_path, vpn_profile, available_ips):
             print(f"Error writing to file {config_path}: {e}")
 
         try:
-            res = subprocess.run(
-                ["wg", "show", "interfaces"], capture_output=True, text=True, check=True
-            )
-            if (data := res.stdout.strip()) != "":
-                print(f"WireGuard is active ({data}). Restarting to apply changes...")
+            if is_vpn_established():
                 # Restart the WireGuard interface to apply changes
                 subprocess.run(
                     ["wg-quick", "down", vpn_profile], check=True, capture_output=True
@@ -109,11 +111,27 @@ def update_wireguard_config(config_path, vpn_profile, available_ips):
                 subprocess.run(
                     ["wg-quick", "up", vpn_profile], check=True, capture_output=True
                 )
+                return
+
         except subprocess.CalledProcessError as e:
             print(f"Command failed with error: {e}")
             print(f"Error output: {e.stderr}")
+
     else:
         print("All endpoints are already up to date.")
+
+    try:
+        if up and not is_vpn_established():
+            print("Establishing VPN connection...")
+            subprocess.run(
+                ["wg-quick", "up", vpn_profile], check=True, capture_output=True
+            )
+            print("VPN connection established.")
+            return
+
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed with error: {e}")
+        print(f"Error output: {e.stderr}")
 
 
 def main():
@@ -127,7 +145,7 @@ def main():
     )
     parser.add_argument(
         "--continious",
-        default=False,
+        action="store_true",
         help="Run the worker in continuous mode, polling for updates every 20 seconds.",
     )
     parser.add_argument(
@@ -139,6 +157,12 @@ def main():
         "--aws-profile",
         default=None,
         help="AWS profile name to use (optional, falls back to keychain or default resolution)",
+    )
+
+    parser.add_argument(
+        "--up",
+        action="store_true",
+        help="Establish VPN connection if not established already",
     )
 
     args = parser.parse_args()
@@ -154,12 +178,13 @@ def main():
 
         if available_ips:
             print(f"Found running VPN instances: {available_ips}")
-            update_wireguard_config(args.config_file, vpn_profile, available_ips)
+            update_wireguard_config(
+                args.config_file, vpn_profile, available_ips, args.up
+            )
         else:
             print("No running VPN instances found.")
 
         if not args.continious:
-            print("Exiting after one run as --continious is not set.")
             break
 
         print("Waiting for 20 seconds before the next poll...")

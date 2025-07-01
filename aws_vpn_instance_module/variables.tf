@@ -37,5 +37,5 @@ variable "security_group_id" {
 variable "use_spot_instance" {
   type        = bool
   description = "Set to true to use a spot instance"
-  default     = true
+  default     = false
 }
