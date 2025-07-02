@@ -147,6 +147,7 @@ module "aws_vpn_instance_${each.value.zone_alias}_${each.value.name}" {
     wg_easy_web_port      = "${each.value.wg_easy_web_port}"
     wg_server_private_key = "${var.wg_server_private_key}"
     wg_clients            = jsonencode(${jsonencode(var.wg_clients)})
+    idle_shutdown_script  = file("${path.root}/provision/idle_shutdown.py")
   })
   instance_name     = "vpn-instance-${each.value.name}"
   subnet_id         = module.aws_vpn_network_${each.value.zone_alias}.subnet_id

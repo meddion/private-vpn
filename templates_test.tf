@@ -26,6 +26,7 @@ resource "local_file" "wg_easy_template" {
     wg_easy_web_port      = each.value.wg_easy_web_port
     wg_server_private_key = var.wg_server_private_key
     wg_clients            = jsonencode(var.wg_clients)
+    idle_shutdown_script  = file("${path.root}/provision/idle_shutdown.py")
   })
 
   filename = "${path.root}/generated/tests/wg_easy.sh"

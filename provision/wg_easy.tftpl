@@ -15,7 +15,7 @@ sudo apt-get install -y wireguard
 curl -fsSL https://get.docker.com -o get-docker.sh
 sh get-docker.sh
 sudo usermod -aG docker ${vm_user}
-# newgrp docker 
+# newgrp docker
 
 mkdir -p /etc/wireguard
 
@@ -26,7 +26,7 @@ wg genkey | sudo tee /etc/wireguard/privatekey
 %{ endif }
 
 if sudo test ! -f "/etc/wireguard/publickey"; then
-  sudo cat /etc/wireguard/privatekey | wg pubkey | sudo tee /etc/wireguard/publickey > /dev/null
+    sudo cat /etc/wireguard/privatekey | wg pubkey | sudo tee /etc/wireguard/publickey > /dev/null
 fi
 
 PRIVATE_KEY=$(sudo cat /etc/wireguard/privatekey)
@@ -42,7 +42,7 @@ sudo tee /etc/wireguard/wg0.json > /dev/null <<EOF
       },
       "clients": {
         %{ for idx, client in jsondecode(wg_clients) }
-          "${uuid()}": { 
+          "${uuid()}": {
                 "name": "${client.name}",
                 "enabled": true,
                 "address": "${client.address}",
@@ -97,3 +97,27 @@ services:
 EOF
 
 docker compose up -d
+
+# Idle shutdown service.
+cat <<'EOF' > /usr/local/bin/idle_shutdown.py
+${idle_shutdown_script}
+EOF
+
+chmod +x /usr/local/bin/idle_shutdown.py
+
+cat <<EOF > /etc/systemd/system/idle-shutdown.service
+[Unit]
+Description=Idle shutdown service for WireGuard
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/idle_shutdown.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable idle-shutdown.service
+systemctl start idle-shutdown.service
+
