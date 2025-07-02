@@ -190,11 +190,13 @@ def main():
             update_wireguard_config(
                 args.config_file, vpn_profile, available_ips, args.up
             )
-        else:
+        elif args.up:
             print("No running VPN instances found. Spinning up new instances...")
             apply_func(args.vpn_config, False, False)
             wait_for_vpn_instance(args.region, args.aws_profile)
             continue
+        else:
+            print("No running VPN instances found. Skipping WireGuard config update.")
 
         if not args.continious:
             break
