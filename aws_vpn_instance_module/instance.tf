@@ -36,10 +36,13 @@ resource "aws_launch_template" "vpn_launch_template" {
   user_data     = base64encode(var.user_data)
 
   network_interfaces {
+    delete_on_termination       = true
     associate_public_ip_address = true
     security_groups             = [var.security_group_id]
     subnet_id                   = var.subnet_id
   }
+
+  instance_initiated_shutdown_behavior = "terminate"
 
   dynamic "instance_market_options" {
     for_each = var.use_spot_instance ? [1] : []
@@ -60,16 +63,29 @@ resource "aws_launch_template" "vpn_launch_template" {
   }
 }
 
-resource "aws_autoscaling_group" "vpn_asg" {
-  name_prefix = var.instance_name
-  desired_capacity = 1
-  max_size         = 1
-  min_size         = 1
+# resource "aws_autoscaling_group" "vpn_asg" {
+#   name_prefix = var.instance_name
+#   desired_capacity = 1
+#   max_size         = 1
+#   min_size         = 1
 
-  vpc_zone_identifier = [var.subnet_id]
+#   vpc_zone_identifier = [var.subnet_id]
 
+#   launch_template {
+#     id      = aws_launch_template.vpn_launch_template.id
+#     version = "$Latest"
+#   }
+# }
+
+
+resource "aws_instance" "vpn_instance" {
+  # subnet_id = var.subnet_id
   launch_template {
     id      = aws_launch_template.vpn_launch_template.id
     version = "$Latest"
+  }
+
+  tags = {
+    Name = var.instance_name
   }
 }
