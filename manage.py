@@ -192,6 +192,10 @@ def gen(config):
     help="Ask to continue or don't ask",
 )
 def apply(config, print_config, ask):
+    apply_func(config, print_config, ask)
+
+
+def apply_func(config, print_config, ask):
     update_terraform_tfvars(load_config(config, print_config, ask))
 
     # Generate the modules.

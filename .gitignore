@@ -1,7 +1,7 @@
 .vscode
 rm_state*
 node_modules
-
+__pycache__
 private_vpn_host.pub
 config.yaml
 generated

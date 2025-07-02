@@ -8,6 +8,8 @@ import time
 import boto3
 import botocore
 
+from manage import apply_func
+
 
 def vpn_instance_ips(region=None, aws_profile=None):
     """
@@ -165,6 +167,13 @@ def main():
         help="Establish VPN connection if not established already",
     )
 
+    parser.add_argument(
+        "--vpn-config",
+        type=str,
+        required=True,
+        help="Path to yaml config file with VPN settings",
+    )
+
     args = parser.parse_args()
 
     filename_with_extension = os.path.basename(args.config_file)
@@ -182,13 +191,28 @@ def main():
                 args.config_file, vpn_profile, available_ips, args.up
             )
         else:
-            print("No running VPN instances found.")
+            print("No running VPN instances found. Spinning up new instances...")
+            apply_func(args.vpn_config, False, False)
+            wait_for_vpn_instance(args.region, args.aws_profile)
+            continue
 
         if not args.continious:
             break
 
         print("Waiting for 20 seconds before the next poll...")
         time.sleep(20)
+
+
+def wait_for_vpn_instance(region, aws_profile):
+    """
+    Waits for a VPN instance to become available.
+    """
+    while True:
+        ips = vpn_instance_ips(region=region, aws_profile=aws_profile)
+        if ips:
+            return
+        print("Waiting for VPN instance to become available...")
+        time.sleep(5)
 
 
 if __name__ == "__main__":
