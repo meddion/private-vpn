@@ -3,7 +3,7 @@ import subprocess
 import time
 
 # The maximum idle time in minutes before shutting down.
-MAX_IDLE_MINUTES = 15
+MAX_IDLE_MINUTES = 3 * 60 
 
 
 def get_last_handshake_time():
