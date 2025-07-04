@@ -174,6 +174,13 @@ def main():
         help="Path to yaml config file with VPN settings",
     )
 
+    parser.add_argument(
+        "--tf-dir",
+        type=str,
+        default=".",
+        help="Path to directory where private-vpn is clonned",
+    )
+
     args = parser.parse_args()
 
     filename_with_extension = os.path.basename(args.config_file)
@@ -190,8 +197,9 @@ def main():
             update_wireguard_config(
                 args.config_file, vpn_profile, available_ips, args.up
             )
-        elif args.up:
+        elif args.up and args.tf_dir != "":
             print("No running VPN instances found. Spinning up new instances...")
+            os.chdir(args.tf_dir)
             apply_func(args.vpn_config, False, False)
             wait_for_vpn_instance(args.region, args.aws_profile)
             continue
