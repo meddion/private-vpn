@@ -212,6 +212,8 @@ def wait_for_vpn_instance(region, aws_profile):
     while True:
         ips = vpn_instance_ips(region=region, aws_profile=aws_profile)
         if ips:
+            print("Waiting 90 seconds for a VPN instance to start serving...")
+            time.sleep(90)
             return
         print("Waiting for VPN instance to become available...")
         time.sleep(5)
